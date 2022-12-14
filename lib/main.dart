@@ -1,6 +1,7 @@
 // ignore_for_file: no_logic_in_create_state, library_private_types_in_public_api
 import 'package:flutter/material.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:uuid/uuid.dart';
 
 void main() {
   runApp(const MyApp());
@@ -26,7 +27,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late DraggableController<String> draggableController;
+  late DraggableController draggableController;
 
   double x = 200;
   double y = 200;
@@ -42,7 +43,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    draggableController = DraggableController<String>();
+    draggableController = DraggableController();
   }
 
   @override
@@ -61,53 +62,74 @@ class _MyHomePageState extends State<MyHomePage> {
         fit: StackFit.loose,
         children: [
           const SizedBox.expand(),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              StreamBuilder<DraggableInfo<String>>(
-                  initialData: DraggableInfo<String>(false, 'hi'),
+          ListView.builder(
+            itemCount: 5,
+            itemBuilder: (context, index) {
+              final String draggableId = const Uuid().v4();
+              return StreamBuilder<DraggableInfo>(
+                  initialData: DraggableInfo(false, draggableId),
                   stream: draggableController._isOnTarget,
                   builder: (context, snapshot) {
                     bool isOnTarget = snapshot.data?.isOnTarget ?? false;
-                    return DragTarget<String>(
-                      builder: (context, list, list2) {
-                        return Center(
-                          child: isOnTarget
-                              ? const CreateButton()
-                              : Container(
-                                  height: 50,
-                                  width: screenSize.width / 2,
-                                  color: Colors.blueGrey,
-                                  child: const Center(
-                                    child: Text('TARGET'),
-                                  ),
-                                ),
-                        );
-                      },
-                      onAccept: (item) async {
-                        await showDialog(
-                            context: context,
-                            builder: (_) => const AlertDialog(
-                                  title: Text('Dialog Title'),
-                                  content: Text('This is my content'),
-                                ));
-                        draggableController._isOnTarget
-                            .add(DraggableInfo(false, null));
-                      },
-                      onWillAccept: (item) {
-                        debugPrint('draggable is on the target');
-                        draggableController._isOnTarget
-                            .add(DraggableInfo(true, null));
-                        return true;
-                      },
-                      onLeave: (item) {
-                        debugPrint('draggable has left the target');
-                        draggableController._isOnTarget
-                            .add(DraggableInfo(false, null));
-                      },
+                    AnimationController? animationController;
+                    return Align(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 16.0),
+                        child: DragTarget<String>(
+                          builder: (context, list, list2) {
+                            return isOnTarget &&
+                                    snapshot.data?.draggableId == draggableId
+                                ? CreateButton(
+                                    animationController: (value) {
+                                      animationController = value;
+                                    },
+                                  )
+                                : Container(
+                                    height: 50,
+                                    width: screenSize.width / 2,
+                                    // color: Colors.blueGrey,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blueGrey,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Center(
+                                      child: Text('TARGET'),
+                                    ),
+                                  );
+                          },
+                          onAccept: (item) async {
+                            await showDialog(
+                                context: context,
+                                builder: (_) => const AlertDialog(
+                                      title: Text('Dialog Title'),
+                                      content: Text('This is my content'),
+                                    ));
+                            draggableController._isOnTarget
+                                .add(DraggableInfo(false, draggableId));
+                          },
+                          onWillAccept: (item) {
+                            debugPrint('draggable is on the target');
+                            draggableController._isOnTarget
+                                .add(DraggableInfo(true, draggableId));
+                            return true;
+                          },
+                          onMove: (DragTargetDetails<String> details) {
+                            debugPrint(
+                                'draggable is on move the target ${details.offset}');
+                          },
+                          onLeave: (item) async {
+                            debugPrint('draggable has left the target');
+                            if (!(animationController?.isDismissed ?? true)) {
+                              await animationController?.reverse(from: 0.95);
+                            }
+                            draggableController._isOnTarget
+                                .add(DraggableInfo(false, draggableId));
+                          },
+                        ),
+                      ),
                     );
-                  }),
-            ],
+                  });
+            },
           ),
           StatefulBuilder(builder: (context, setState2) {
             return AnimatedPositioned(
@@ -127,8 +149,8 @@ class _MyHomePageState extends State<MyHomePage> {
                     y = defaultY;
                     setState2(() {});
                   },
-                  feedback: StreamBuilder<DraggableInfo<String>>(
-                    initialData: DraggableInfo<String>(false, 'hi'),
+                  feedback: StreamBuilder<DraggableInfo>(
+                    initialData: DraggableInfo(false, ''),
                     stream: draggableController._isOnTarget,
                     builder: (context, snapshot) {
                       bool isOnTarget = snapshot.data?.isOnTarget ?? false;
@@ -136,7 +158,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         height: isOnTarget ? 0 : floatingActionSize,
                         width: isOnTarget ? 0 : floatingActionSize,
                         color: Colors.green,
-                        curve: Curves.bounceOut,
+                        curve: Curves.bounceInOut,
                         duration: const Duration(milliseconds: 100),
                       );
                     },
@@ -160,7 +182,8 @@ class _MyHomePageState extends State<MyHomePage> {
 }
 
 class CreateButton extends StatefulWidget {
-  const CreateButton({Key? key}) : super(key: key);
+  final ValueChanged<AnimationController>? animationController;
+  const CreateButton({Key? key, this.animationController}) : super(key: key);
 
   @override
   State<StatefulWidget> createState() => _CreateButton();
@@ -172,25 +195,31 @@ class _CreateButton extends State<CreateButton> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-
     _controller = AnimationController(
-        duration: const Duration(milliseconds: 700), vsync: this);
+        duration: const Duration(milliseconds: 300),
+        reverseDuration: const Duration(milliseconds: 150),
+        vsync: this);
+    widget.animationController?.call(_controller);
     _controller.forward();
   }
 
   @override
   void dispose() {
-    super.dispose();
     _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return ScaleTransition(
+      alignment: Alignment.bottomRight,
       scale: Tween(begin: 0.0, end: 1.0).animate(
-          CurvedAnimation(parent: _controller, curve: Curves.elasticOut)),
+          CurvedAnimation(parent: _controller, curve: Curves.bounceInOut)),
       child: Container(
-        color: Colors.green,
+        decoration: BoxDecoration(
+          color: Colors.green,
+          borderRadius: BorderRadius.circular(8),
+        ),
         height: 50,
         width: MediaQuery.of(context).size.width / 2,
       ),
@@ -198,20 +227,20 @@ class _CreateButton extends State<CreateButton> with TickerProviderStateMixin {
   }
 }
 
-class DraggableInfo<T> {
+class DraggableInfo {
   bool isOnTarget;
-  T? data;
-  DraggableInfo(this.isOnTarget, this.data);
+  final String draggableId;
+  DraggableInfo(this.isOnTarget, this.draggableId);
 }
 
-class DraggableController<T> {
-  late BehaviorSubject<DraggableInfo<T>> _isOnTarget;
+class DraggableController {
+  late BehaviorSubject<DraggableInfo> _isOnTarget;
 
   DraggableController() {
-    _isOnTarget = BehaviorSubject<DraggableInfo<T>>();
+    _isOnTarget = BehaviorSubject<DraggableInfo>();
   }
 
-  void onTarget(bool onTarget, T data) {
-    _isOnTarget.add(DraggableInfo(onTarget, data));
-  }
+  // void onTarget(bool onTarget) {
+  //   _isOnTarget.add(DraggableInfo(onTarget));
+  // }
 }
