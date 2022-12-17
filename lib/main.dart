@@ -1,6 +1,5 @@
-// ignore_for_file: no_logic_in_create_state, library_private_types_in_public_api
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:uuid/uuid.dart';
 
 void main() {
@@ -27,10 +26,10 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late DraggableController draggableController;
+  late StreamController<DraggableInfo> draggableController;
 
-  double x = 200;
-  double y = 200;
+  double x = 0;
+  double y = 0;
   bool isDrag = false;
 
   double defaultX = 0;
@@ -38,12 +37,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Size get screenSize => MediaQuery.of(context).size;
   EdgeInsets get viewPadding => MediaQuery.of(context).viewPadding;
-  double get floatingActionSize => 50;
+  double get floatingActionSize => 75;
+
+  final List<String> _event = [];
 
   @override
   void initState() {
     super.initState();
-    draggableController = DraggableController();
+    draggableController = StreamController<DraggableInfo>.broadcast();
   }
 
   @override
@@ -62,118 +63,79 @@ class _MyHomePageState extends State<MyHomePage> {
         fit: StackFit.loose,
         children: [
           const SizedBox.expand(),
-          ListView.builder(
-            itemCount: 5,
-            itemBuilder: (context, index) {
-              final String draggableId = const Uuid().v4();
-              return StreamBuilder<DraggableInfo>(
-                  initialData: DraggableInfo(false, draggableId),
-                  stream: draggableController._isOnTarget,
-                  builder: (context, snapshot) {
-                    bool isOnTarget = snapshot.data?.isOnTarget ?? false;
-                    AnimationController? animationController;
-                    return Align(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 16.0),
-                        child: DragTarget<String>(
-                          builder: (context, list, list2) {
-                            return isOnTarget &&
-                                    snapshot.data?.draggableId == draggableId
-                                ? CreateButton(
-                                    animationController: (value) {
-                                      animationController = value;
-                                    },
-                                  )
-                                : Container(
-                                    height: 50,
-                                    width: screenSize.width / 2,
-                                    // color: Colors.blueGrey,
-                                    decoration: BoxDecoration(
-                                      color: Colors.blueGrey,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Center(
-                                      child: Text('TARGET'),
-                                    ),
-                                  );
-                          },
-                          onAccept: (item) async {
-                            await showDialog(
-                                context: context,
-                                builder: (_) => const AlertDialog(
-                                      title: Text('Dialog Title'),
-                                      content: Text('This is my content'),
-                                    ));
-                            draggableController._isOnTarget
-                                .add(DraggableInfo(false, draggableId));
-                          },
-                          onWillAccept: (item) {
-                            debugPrint('draggable is on the target');
-                            draggableController._isOnTarget
-                                .add(DraggableInfo(true, draggableId));
-                            return true;
-                          },
-                          onMove: (DragTargetDetails<String> details) {
-                            debugPrint(
-                                'draggable is on move the target ${details.offset}');
-                          },
-                          onLeave: (item) async {
-                            debugPrint('draggable has left the target');
-                            if (!(animationController?.isDismissed ?? true)) {
-                              await animationController?.reverse(from: 0.95);
-                            }
-                            draggableController._isOnTarget
-                                .add(DraggableInfo(false, draggableId));
-                          },
-                        ),
-                      ),
+          _event.isEmpty
+              ? DragTargetWidget(
+                  streamController: draggableController,
+                  onTargetAccept: () {
+                    _event.add("Event ${_event.length + 1}");
+                    setState(() {});
+                  },
+                )
+              : ListView.separated(
+                  itemCount: _event.length,
+                  itemBuilder: (context, index) {
+                    return DragTargetWidget(
+                      streamController: draggableController,
+                      onTargetAccept: () {
+                        _event.add("Event ${_event.length + 1}");
+                        setState(() {});
+                      },
                     );
-                  });
-            },
-          ),
+                  },
+                  separatorBuilder: (BuildContext context, int index) {
+                    return DragTargetWidget(
+                      streamController: draggableController,
+                      smallTarget: true,
+                      onTargetAccept: () {
+                        _event.add("Event ${_event.length + 1}");
+                        setState(() {});
+                      },
+                    );
+                  },
+                ),
           StatefulBuilder(builder: (context, setState2) {
             return AnimatedPositioned(
-                left: x,
-                top: y,
-                curve: Curves.elasticOut,
-                duration: const Duration(milliseconds: 700),
-                child: Draggable(
-                  data: "hi",
-                  onDragUpdate: (details) {
-                    x = x + details.delta.dx;
-                    y = y + details.delta.dy;
-                    setState2(() {});
+              left: x,
+              top: y,
+              curve: Curves.elasticOut,
+              duration: const Duration(milliseconds: 700),
+              child: Draggable(
+                data: "hi",
+                onDragUpdate: (details) {
+                  x = x + details.delta.dx;
+                  y = y + details.delta.dy;
+                  setState2(() {});
+                },
+                onDragEnd: (details) {
+                  x = defaultX;
+                  y = defaultY;
+                  setState2(() {});
+                },
+                feedback: StreamBuilder<DraggableInfo>(
+                  initialData: DraggableInfo(false, ''),
+                  stream: draggableController.stream,
+                  builder: (context, snapshot) {
+                    bool isOnTarget = snapshot.data?.isOnTarget ?? false;
+                    return AnimatedContainer(
+                      height: isOnTarget ? 0 : floatingActionSize,
+                      width: isOnTarget ? 0 : floatingActionSize,
+                      color: Colors.blue,
+                      curve: Curves.bounceInOut,
+                      duration: const Duration(milliseconds: 100),
+                      child:
+                          isOnTarget ? const SizedBox() : const Icon(Icons.add),
+                    );
                   },
-                  onDragEnd: (details) {
-                    x = defaultX;
-                    y = defaultY;
-                    setState2(() {});
-                  },
-                  feedback: StreamBuilder<DraggableInfo>(
-                    initialData: DraggableInfo(false, ''),
-                    stream: draggableController._isOnTarget,
-                    builder: (context, snapshot) {
-                      bool isOnTarget = snapshot.data?.isOnTarget ?? false;
-                      return AnimatedContainer(
-                        height: isOnTarget ? 0 : floatingActionSize,
-                        width: isOnTarget ? 0 : floatingActionSize,
-                        color: Colors.green,
-                        curve: Curves.bounceInOut,
-                        duration: const Duration(milliseconds: 100),
-                      );
-                    },
-                  ),
-                  childWhenDragging: const SizedBox(),
-                  // onDraggableCanceled: (_, __) {
-                  //   draggableController._isOnTarget
-                  //       .add(DraggableInfo(false, null));
-                  // },
-                  child: Container(
-                    height: floatingActionSize,
-                    width: floatingActionSize,
-                    color: Colors.green,
-                  ),
-                ));
+                ),
+                childWhenDragging: const SizedBox(),
+                child: Container(
+                  width: floatingActionSize,
+                  height: floatingActionSize,
+                  color: Colors.blue,
+                  child: const Icon(Icons.add),
+                ),
+              ),
+            );
           }),
         ],
       ),
@@ -181,15 +143,150 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-class CreateButton extends StatefulWidget {
-  final ValueChanged<AnimationController>? animationController;
-  const CreateButton({Key? key, this.animationController}) : super(key: key);
+class DragTargetWidget extends StatefulWidget {
+  final StreamController<DraggableInfo> streamController;
+  final VoidCallback onTargetAccept;
+  final bool targetEmpty;
+  final bool smallTarget;
+  const DragTargetWidget(
+      {super.key,
+      required this.streamController,
+      this.targetEmpty = false,
+      required this.onTargetAccept,
+      this.smallTarget = false});
 
   @override
-  State<StatefulWidget> createState() => _CreateButton();
+  State<DragTargetWidget> createState() => _DragTargetWidgetState();
 }
 
-class _CreateButton extends State<CreateButton> with TickerProviderStateMixin {
+class _DragTargetWidgetState extends State<DragTargetWidget> {
+  late StreamController<DraggableInfo> _streamController;
+  late String _targetId;
+  final ValueNotifier<Alignment> _alignment = ValueNotifier(Alignment.center);
+
+  Size get screenSize => MediaQuery.of(context).size;
+
+  late Size targetSize;
+
+  @override
+  void initState() {
+    super.initState();
+    _streamController = widget.streamController;
+    _targetId = const Uuid().v4();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    targetSize = Size(screenSize.width * 0.75, widget.smallTarget ? 10 : 75);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DraggableInfo>(
+      initialData: DraggableInfo(false, _targetId),
+      stream: _streamController.stream,
+      builder: (context, snapshot) {
+        bool isOnTarget = snapshot.data?.isOnTarget ?? false;
+        return Align(
+          child: Builder(
+            builder: (context) {
+              AnimationController? animationController;
+              return DragTarget<String>(
+                builder: (context, list, list2) {
+                  return isOnTarget && snapshot.data?.draggableId == _targetId
+                      ? Padding(
+                          padding: EdgeInsets.symmetric(
+                              vertical: widget.smallTarget ? 5 : 0),
+                          child: CreateButtonWidget(
+                            alignmentNotify: _alignment,
+                            animationController: (AnimationController value) {
+                              animationController = value;
+                            },
+                          ),
+                        )
+                      : (widget.targetEmpty
+                          ? Container(
+                              height: targetSize.height,
+                              width: targetSize.width,
+                              decoration: BoxDecoration(
+                                color: Colors.blueGrey,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Center(
+                                child: Text('TARGET EMPTY'),
+                              ),
+                            )
+                          : Container(
+                              height: targetSize.height,
+                              width: targetSize.width,
+                              margin: EdgeInsets.symmetric(
+                                  vertical: widget.smallTarget ? 5 : 0),
+                              decoration: BoxDecoration(
+                                color: Colors.blueGrey,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(widget.smallTarget ? '' : 'TARGET'),
+                              ),
+                            ));
+                },
+                onAccept: (item) async {
+                  await showDialog(
+                      context: context,
+                      builder: (_) => const AlertDialog(
+                            title: Text('Dialog Title'),
+                            content: Text('This is my content'),
+                          ));
+                  widget.onTargetAccept.call();
+                  _streamController.sink.add(DraggableInfo(false, _targetId));
+                },
+                onWillAccept: (item) {
+                  debugPrint('draggable is on the target');
+                  _streamController.sink.add(DraggableInfo(true, _targetId));
+                  return true;
+                },
+                onMove: (DragTargetDetails<String> details) {
+                  RenderBox renderBox =
+                      (context.findRenderObject() as RenderBox);
+                  Offset localTouchPosition =
+                      renderBox.globalToLocal(details.offset);
+                  double width = renderBox.size.width;
+                  double height = renderBox.size.height;
+                  var alignmentX =
+                      (localTouchPosition.dx - width / 2) / (width / 2);
+                  var alignmentY =
+                      (localTouchPosition.dy - height / 2) / (height / 2);
+                  _alignment.value = Alignment(alignmentX, alignmentY);
+                },
+                onLeave: (item) async {
+                  debugPrint('draggable has left the target');
+                  await animationController?.reverse();
+                  _streamController.sink.add(DraggableInfo(false, _targetId));
+                },
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class CreateButtonWidget extends StatefulWidget {
+  final ValueNotifier<Alignment> alignmentNotify;
+  final ValueChanged<AnimationController> animationController;
+  const CreateButtonWidget(
+      {super.key,
+      required this.alignmentNotify,
+      required this.animationController});
+
+  @override
+  State<CreateButtonWidget> createState() => _CreateButtonWidgetState();
+}
+
+class _CreateButtonWidgetState extends State<CreateButtonWidget>
+    with TickerProviderStateMixin {
   late AnimationController _controller;
 
   @override
@@ -197,9 +294,9 @@ class _CreateButton extends State<CreateButton> with TickerProviderStateMixin {
     super.initState();
     _controller = AnimationController(
         duration: const Duration(milliseconds: 300),
-        reverseDuration: const Duration(milliseconds: 150),
+        reverseDuration: const Duration(milliseconds: 200),
         vsync: this);
-    widget.animationController?.call(_controller);
+    widget.animationController.call(_controller);
     _controller.forward();
   }
 
@@ -211,19 +308,25 @@ class _CreateButton extends State<CreateButton> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return ScaleTransition(
-      alignment: Alignment.bottomRight,
-      scale: Tween(begin: 0.0, end: 1.0).animate(
-          CurvedAnimation(parent: _controller, curve: Curves.bounceInOut)),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.green,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        height: 50,
-        width: MediaQuery.of(context).size.width / 2,
-      ),
-    );
+    return ValueListenableBuilder<Alignment>(
+        valueListenable: widget.alignmentNotify,
+        builder: (context, value, _) {
+          return ScaleTransition(
+            alignment: value,
+            scale: Tween(begin: 0.25, end: 1.0).animate(CurvedAnimation(
+              parent: _controller,
+              curve: Curves.easeOutBack,
+            )),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.green,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              height: 75,
+              width: MediaQuery.of(context).size.width * 0.75,
+            ),
+          );
+        });
   }
 }
 
@@ -231,16 +334,4 @@ class DraggableInfo {
   bool isOnTarget;
   final String draggableId;
   DraggableInfo(this.isOnTarget, this.draggableId);
-}
-
-class DraggableController {
-  late BehaviorSubject<DraggableInfo> _isOnTarget;
-
-  DraggableController() {
-    _isOnTarget = BehaviorSubject<DraggableInfo>();
-  }
-
-  // void onTarget(bool onTarget) {
-  //   _isOnTarget.add(DraggableInfo(onTarget));
-  // }
 }
