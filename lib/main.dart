@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
@@ -37,7 +38,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Size get screenSize => MediaQuery.of(context).size;
   EdgeInsets get viewPadding => MediaQuery.of(context).viewPadding;
-  double get floatingActionSize => 75;
+  double get floatingActionSize => 50;
 
   final List<String> _event = [];
 
@@ -50,7 +51,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    defaultX = (screenSize.width - 50) / 2;
+    defaultX = (screenSize.width - floatingActionSize) / 2;
     defaultY = screenSize.height - floatingActionSize - viewPadding.bottom;
     x = defaultX;
     y = defaultY;
@@ -72,14 +73,17 @@ class _MyHomePageState extends State<MyHomePage> {
                   },
                 )
               : ListView.separated(
-                  itemCount: _event.length,
+                  itemCount: _event.length + 1,
                   itemBuilder: (context, index) {
-                    return DragTargetWidget(
-                      streamController: draggableController,
-                      onTargetAccept: () {
-                        _event.add("Event ${_event.length + 1}");
-                        setState(() {});
-                      },
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: DragTargetWidget(
+                        streamController: draggableController,
+                        onTargetAccept: () {
+                          _event.add("Event ${_event.length + 1}");
+                          setState(() {});
+                        },
+                      ),
                     );
                   },
                   separatorBuilder: (BuildContext context, int index) {
@@ -289,6 +293,8 @@ class _CreateButtonWidgetState extends State<CreateButtonWidget>
     with TickerProviderStateMixin {
   late AnimationController _controller;
 
+  late Animation<double> _animation;
+
   @override
   void initState() {
     super.initState();
@@ -297,6 +303,10 @@ class _CreateButtonWidgetState extends State<CreateButtonWidget>
         reverseDuration: const Duration(milliseconds: 200),
         vsync: this);
     widget.animationController.call(_controller);
+    _animation = Tween(begin: 0.25, end: 1.0).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutBack,
+    ));
     _controller.forward();
   }
 
@@ -313,17 +323,17 @@ class _CreateButtonWidgetState extends State<CreateButtonWidget>
         builder: (context, value, _) {
           return ScaleTransition(
             alignment: value,
-            scale: Tween(begin: 0.25, end: 1.0).animate(CurvedAnimation(
-              parent: _controller,
-              curve: Curves.easeOutBack,
-            )),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.green,
-                borderRadius: BorderRadius.circular(8),
+            scale: _animation,
+            child: FadeTransition(
+              opacity: _animation,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                height: 75,
+                width: (MediaQuery.of(context).size.width * 0.75),
               ),
-              height: 75,
-              width: MediaQuery.of(context).size.width * 0.75,
             ),
           );
         });
