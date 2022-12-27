@@ -35,6 +35,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   double defaultX = 0;
   double defaultY = 0;
+  String targetMove = "";
 
   Size get screenSize => MediaQuery.of(context).size;
   EdgeInsets get viewPadding => MediaQuery.of(context).viewPadding;
@@ -66,22 +67,43 @@ class _MyHomePageState extends State<MyHomePage> {
           const SizedBox.expand(),
           _event.isEmpty
               ? DragTargetWidget(
+                  indexItem: 0,
                   streamController: draggableController,
                   targetEmpty: true,
                   onTargetAccept: () {
-                    _event.add("Event ${_event.length + 1}");
+                    _event.add(Uuid().v4());
                     setState(() {});
                   },
+                  targetId: Uuid().v4(),
                 )
               : ListView.separated(
                   itemCount: _event.length,
                   itemBuilder: (context, index) {
                     return DragTargetWidget(
+                      title: _event[index],
+                      indexItem: index,
+                      isLast: index == _event.length - 1,
+                      isFirst: index == 0,
                       streamController: draggableController,
                       onTargetAccept: () {
-                        _event.add("Event ${_event.length + 1}");
+                        _event.insert(index + 1, Uuid().v4());
                         setState(() {});
                       },
+                      onMoveIndex: (value) {
+                        targetMove = value;
+                        print("onMoveIndex: $targetMove");
+                        setState(() {});
+                      },
+                      onChangeIndex: (value) {
+                        int index1 = _event.indexOf(value);
+                        int index2 = _event.indexOf(targetMove);
+                        _event[index1] = targetMove;
+                        _event[index2] = value;
+
+                        targetMove = "";
+                        setState(() {});
+                      },
+                      targetId: _event[index],
                     );
                   },
                   separatorBuilder: (BuildContext context, int index) {
@@ -123,11 +145,17 @@ class _MyHomePageState extends State<MyHomePage> {
                   },
                 ),
                 childWhenDragging: const SizedBox(),
-                child: Container(
-                  width: floatingActionSize,
-                  height: floatingActionSize,
-                  color: Colors.blue,
-                  child: const Icon(Icons.add),
+                child: DragTarget<String>(
+                  onAccept: (data) {},
+                  builder: (context, candidateData, rejectedData) {
+                    return Container(
+                      width: floatingActionSize,
+                      height: floatingActionSize,
+                      color: Colors.blue,
+                      child:
+                          Icon(targetMove.isEmpty ? Icons.delete : Icons.add),
+                    );
+                  },
                 ),
               ),
             );
@@ -142,11 +170,26 @@ class DragTargetWidget extends StatefulWidget {
   final StreamController<DraggableInfo> streamController;
   final VoidCallback onTargetAccept;
   final bool targetEmpty;
+  final String? title;
+  final bool? isLast;
+  final bool? isFirst;
+  final int indexItem;
+  final ValueChanged<String>? onChangeIndex;
+  final ValueChanged<String>? onMoveIndex;
+
+  final String targetId;
   const DragTargetWidget({
     super.key,
     required this.streamController,
     this.targetEmpty = false,
     required this.onTargetAccept,
+    this.title,
+    this.isLast,
+    this.isFirst,
+    required this.indexItem,
+    this.onChangeIndex,
+    required this.targetId,
+    this.onMoveIndex,
   });
 
   @override
@@ -168,7 +211,7 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
   void initState() {
     super.initState();
     _streamController = widget.streamController;
-    _targetId = const Uuid().v4();
+    _targetId = widget.targetId; //const Uuid().v4();
   }
 
   @override
@@ -204,56 +247,72 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
                           child: Text('TARGET EMPTY'),
                         ),
                       ))
-                  : Container(
-                      height: targetSize.height,
-                      width: targetSize.width,
-                      decoration: BoxDecoration(
-                        color: Colors.blueGrey,
-                        borderRadius: BorderRadius.circular(8),
+                  : Draggable<String>(
+                      data: "",
+                      onDragStarted: () {
+                        widget.onMoveIndex?.call(widget.targetId);
+                      },
+                      feedback: Material(
+                        child: Container(
+                          height: targetSize.height,
+                          width: targetSize.width,
+                          decoration: BoxDecoration(
+                            color: Colors.blueGrey,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Center(
+                            child: Text(widget.title ?? _targetId),
+                          ),
+                        ),
                       ),
-                      child: Center(
-                        child: Text(targetSize.height.toString()),
+                      childWhenDragging: Container(
+                        height: targetSize.height,
+                        width: targetSize.width,
+                        decoration: BoxDecoration(
+                          color: Colors.blueGrey,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Container(
+                        height: targetSize.height,
+                        width: targetSize.width,
+                        decoration: BoxDecoration(
+                          color: Colors.blueGrey,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Text(widget.title ?? _targetId),
+                        ),
                       ),
                     ),
               Visibility(
                 visible: !widget.targetEmpty,
                 child: GestureDetector(
-                  onLongPressStart: (details) {
-                    globalPositionPress = details.globalPosition.dy;
-                    setState(() => onLongPress = true);
-                  },
-                  onLongPressEnd: (_) => setState(() {
-                    onLongPress = false;
-                  }),
-                  onLongPressMoveUpdate: (LongPressMoveUpdateDetails details) {
-                    var newHeight = targetSize.height;
-                    if (details.globalPosition.dy > globalPositionPress) {
+                    onLongPressStart: (details) {
                       globalPositionPress = details.globalPosition.dy;
-                      newHeight = newHeight + 1;
-                    } else {
-                      globalPositionPress = details.globalPosition.dy;
-                      newHeight = newHeight - 1;
-                    }
-                    if (newHeight > 150) return;
-                    if (newHeight < 40) return;
+                      setState(() => onLongPress = true);
+                    },
+                    onLongPressEnd: (_) => setState(() {
+                          onLongPress = false;
+                        }),
+                    onLongPressMoveUpdate:
+                        (LongPressMoveUpdateDetails details) {
+                      var newHeight = targetSize.height;
+                      if (details.globalPosition.dy > globalPositionPress) {
+                        globalPositionPress = details.globalPosition.dy;
+                        newHeight = newHeight + 1;
+                      } else {
+                        globalPositionPress = details.globalPosition.dy;
+                        newHeight = newHeight - 1;
+                      }
+                      if (newHeight > 150) return;
+                      if (newHeight < 40) return;
 
-                    setState(() {
-                      targetSize = Size(screenSize.width * 0.75, newHeight);
-                    });
-                  },
-                  child: _dragTarget(
-                      isOnTarget,
-                      draggableId,
-                      Container(
-                        height: 5,
-                        width: targetSize.width,
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        decoration: BoxDecoration(
-                          color: onLongPress ? Colors.red : Colors.blueGrey,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      )),
-                ),
+                      setState(() {
+                        targetSize = Size(screenSize.width * 0.75, newHeight);
+                      });
+                    },
+                    child: _child(isOnTarget, draggableId)),
               ),
             ],
           ),
@@ -262,7 +321,65 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
     );
   }
 
-  Widget _dragTarget(bool isOnTarget, String? draggableId, Widget child) {
+  Widget _child(bool isOnTarget, String? draggableId) {
+    if (widget.isLast == null && widget.isFirst == null) {
+      return const SizedBox();
+    } else if ((widget.isLast ?? false)) {
+      return _dragTarget(
+          isOnTarget,
+          draggableId,
+          Container(
+            height: 5,
+            width: targetSize.width,
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: onLongPress ? Colors.red : Colors.blueGrey,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          checkTargetAccept: true);
+    } else {
+      return Column(
+        children: [
+          Container(
+            height: 5,
+            width: targetSize.width,
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: onLongPress ? Colors.red : Colors.blueGrey,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          _dragTarget(
+            isOnTarget,
+            draggableId,
+            Container(
+              height: 75,
+              width: screenSize.width * 0.75,
+              decoration: BoxDecoration(
+                color: Colors.redAccent.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(child: Text("Walk")),
+            ),
+            checkTargetAccept: false,
+          ),
+          Container(
+            height: 5,
+            width: targetSize.width,
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: onLongPress ? Colors.red : Colors.blueGrey,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ],
+      );
+    }
+  }
+
+  Widget _dragTarget(bool isOnTarget, String? draggableId, Widget child,
+      {bool checkTargetAccept = true}) {
     return Builder(
       builder: (context) {
         AnimationController? animationController;
@@ -287,7 +404,10 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
                       title: Text('Dialog Title'),
                       content: Text('This is my content'),
                     ));
-            widget.onTargetAccept.call();
+            if (checkTargetAccept) widget.onTargetAccept.call();
+            if (widget.onChangeIndex != null && !checkTargetAccept) {
+              widget.onChangeIndex?.call(widget.targetId);
+            }
             _streamController.sink.add(DraggableInfo(false, _targetId));
           },
           onWillAccept: (item) {
