@@ -1,7 +1,12 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+
+String targetMove = "";
+
+List<String> _event = [];
 
 void main() {
   runApp(const MyApp());
@@ -35,13 +40,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
   double defaultX = 0;
   double defaultY = 0;
-  String targetMove = "";
 
   Size get screenSize => MediaQuery.of(context).size;
   EdgeInsets get viewPadding => MediaQuery.of(context).viewPadding;
   double get floatingActionSize => 50;
-
-  final List<String> _event = [];
 
   @override
   void initState() {
@@ -95,11 +97,12 @@ class _MyHomePageState extends State<MyHomePage> {
                         setState(() {});
                       },
                       onChangeIndex: (value) {
-                        int index1 = _event.indexOf(value);
-                        int index2 = _event.indexOf(targetMove);
-                        _event[index1] = targetMove;
-                        _event[index2] = value;
-
+                        if (value.isNotEmpty) {
+                          int index1 = _event.indexOf(value);
+                          int index2 = _event.indexOf(targetMove);
+                          _event.removeAt(index2);
+                          _event.insert(min(_event.length, index1 + 1), targetMove);
+                        }
                         targetMove = "";
                         setState(() {});
                       },
@@ -117,7 +120,7 @@ class _MyHomePageState extends State<MyHomePage> {
               curve: Curves.elasticOut,
               duration: const Duration(milliseconds: 700),
               child: Draggable(
-                data: "hi",
+                data: "addNewDraggable",
                 onDragUpdate: (details) {
                   x = x + details.delta.dx;
                   y = y + details.delta.dy;
@@ -146,14 +149,18 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
                 childWhenDragging: const SizedBox(),
                 child: DragTarget<String>(
-                  onAccept: (data) {},
+                  onAccept: (data) {
+                    _event.remove(targetMove);
+                    targetMove = "";
+                    setState(() {});
+                  },
                   builder: (context, candidateData, rejectedData) {
                     return Container(
                       width: floatingActionSize,
                       height: floatingActionSize,
                       color: Colors.blue,
-                      child:
-                          Icon(targetMove.isEmpty ? Icons.delete : Icons.add),
+                      child: Icon(
+                          targetMove.isNotEmpty ? Icons.delete : Icons.add),
                     );
                   },
                 ),
@@ -176,8 +183,8 @@ class DragTargetWidget extends StatefulWidget {
   final int indexItem;
   final ValueChanged<String>? onChangeIndex;
   final ValueChanged<String>? onMoveIndex;
-
   final String targetId;
+
   const DragTargetWidget({
     super.key,
     required this.streamController,
@@ -211,13 +218,21 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
   void initState() {
     super.initState();
     _streamController = widget.streamController;
-    _targetId = widget.targetId; //const Uuid().v4();
+    _targetId = widget.targetId;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     targetSize = Size(screenSize.width * 0.75, 75);
+  }
+
+  @override
+  void didUpdateWidget(covariant DragTargetWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _streamController = widget.streamController;
+    _targetId = widget.targetId;
+    setState(() {});
   }
 
   @override
@@ -251,6 +266,9 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
                       data: "",
                       onDragStarted: () {
                         widget.onMoveIndex?.call(widget.targetId);
+                      },
+                      onDraggableCanceled: (velocity, offset) {
+                        widget.onMoveIndex?.call("");
                       },
                       feedback: Material(
                         child: Container(
@@ -287,32 +305,7 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
                     ),
               Visibility(
                 visible: !widget.targetEmpty,
-                child: GestureDetector(
-                    onLongPressStart: (details) {
-                      globalPositionPress = details.globalPosition.dy;
-                      setState(() => onLongPress = true);
-                    },
-                    onLongPressEnd: (_) => setState(() {
-                          onLongPress = false;
-                        }),
-                    onLongPressMoveUpdate:
-                        (LongPressMoveUpdateDetails details) {
-                      var newHeight = targetSize.height;
-                      if (details.globalPosition.dy > globalPositionPress) {
-                        globalPositionPress = details.globalPosition.dy;
-                        newHeight = newHeight + 1;
-                      } else {
-                        globalPositionPress = details.globalPosition.dy;
-                        newHeight = newHeight - 1;
-                      }
-                      if (newHeight > 150) return;
-                      if (newHeight < 40) return;
-
-                      setState(() {
-                        targetSize = Size(screenSize.width * 0.75, newHeight);
-                      });
-                    },
-                    child: _child(isOnTarget, draggableId)),
+                child: _child(isOnTarget, draggableId),
               ),
             ],
           ),
@@ -326,9 +319,10 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
       return const SizedBox();
     } else if ((widget.isLast ?? false)) {
       return _dragTarget(
-          isOnTarget,
-          draggableId,
-          Container(
+        isOnTarget,
+        draggableId,
+        _longPress(
+          child: Container(
             height: 5,
             width: targetSize.width,
             margin: const EdgeInsets.symmetric(vertical: 4),
@@ -337,17 +331,21 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
               borderRadius: BorderRadius.circular(8),
             ),
           ),
-          checkTargetAccept: true);
+        ),
+        checkTargetAccept: true,
+      );
     } else {
       return Column(
         children: [
-          Container(
-            height: 5,
-            width: targetSize.width,
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            decoration: BoxDecoration(
-              color: onLongPress ? Colors.red : Colors.blueGrey,
-              borderRadius: BorderRadius.circular(8),
+          _longPress(
+            child: Container(
+              height: 5,
+              width: targetSize.width,
+              margin: const EdgeInsets.symmetric(vertical: 4),
+              decoration: BoxDecoration(
+                color: onLongPress ? Colors.red : Colors.blueGrey,
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
           ),
           _dragTarget(
@@ -369,13 +367,42 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
             width: targetSize.width,
             margin: const EdgeInsets.symmetric(vertical: 4),
             decoration: BoxDecoration(
-              color: onLongPress ? Colors.red : Colors.blueGrey,
+              color: Colors.blueGrey,
               borderRadius: BorderRadius.circular(8),
             ),
           ),
         ],
       );
     }
+  }
+
+  Widget _longPress({required Widget child}) {
+    return GestureDetector(
+      onLongPressStart: (details) {
+        globalPositionPress = details.globalPosition.dy;
+        setState(() => onLongPress = true);
+      },
+      onLongPressEnd: (_) => setState(() {
+        onLongPress = false;
+      }),
+      onLongPressMoveUpdate: (LongPressMoveUpdateDetails details) {
+        var newHeight = targetSize.height;
+        if (details.globalPosition.dy > globalPositionPress) {
+          globalPositionPress = details.globalPosition.dy;
+          newHeight = newHeight + 1;
+        } else {
+          globalPositionPress = details.globalPosition.dy;
+          newHeight = newHeight - 1;
+        }
+        if (newHeight > 150) return;
+        if (newHeight < 40) return;
+
+        setState(() {
+          targetSize = Size(screenSize.width * 0.75, newHeight);
+        });
+      },
+      child: child,
+    );
   }
 
   Widget _dragTarget(bool isOnTarget, String? draggableId, Widget child,
@@ -404,14 +431,20 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
                       title: Text('Dialog Title'),
                       content: Text('This is my content'),
                     ));
-            if (checkTargetAccept) widget.onTargetAccept.call();
-            if (widget.onChangeIndex != null && !checkTargetAccept) {
+            if (item == "addNewDraggable") {
+              widget.onTargetAccept.call();
+            } else {
               widget.onChangeIndex?.call(widget.targetId);
             }
+
             _streamController.sink.add(DraggableInfo(false, _targetId));
           },
           onWillAccept: (item) {
-            debugPrint('draggable is on the target id $_targetId');
+            int indexTargetMove = _event.indexOf(targetMove);
+            int indexCurrentTarGet = _event.indexOf(_targetId);
+            print("$indexTargetMove $indexCurrentTarGet");
+            if (targetMove == _targetId) return false;
+            if (indexTargetMove == (indexCurrentTarGet + 1)) return false;
             _streamController.sink.add(DraggableInfo(true, _targetId));
             return true;
           },
@@ -426,7 +459,6 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
             _alignment.value = Alignment(alignmentX, alignmentY);
           },
           onLeave: (item) async {
-            debugPrint('draggable has left the target');
             await animationController?.reverse();
             _streamController.sink.add(DraggableInfo(false, _targetId));
           },
