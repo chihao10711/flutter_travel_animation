@@ -3,10 +3,13 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import 'package:collection/collection.dart';
 
-String targetMove = "";
+import 'travel_item_model.dart';
 
-List<String> _event = [];
+TravelModelItem travelItemOnMove = TravelModelItem("");
+
+List<TravelModelItem> _event = [];
 
 void main() {
   runApp(const MyApp());
@@ -32,7 +35,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late StreamController<DraggableInfo> draggableController;
+  late StreamController<TravelModelItem> draggableController;
 
   double x = 0;
   double y = 0;
@@ -48,7 +51,7 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
-    draggableController = StreamController<DraggableInfo>.broadcast();
+    draggableController = StreamController<TravelModelItem>.broadcast();
   }
 
   @override
@@ -73,40 +76,53 @@ class _MyHomePageState extends State<MyHomePage> {
                   streamController: draggableController,
                   targetEmpty: true,
                   onTargetAccept: () {
-                    _event.add(Uuid().v4());
+                    _event.add(TravelModelItem(const Uuid().v4()));
                     setState(() {});
                   },
-                  targetId: Uuid().v4(),
+                  targetId: const Uuid().v4(),
                 )
               : ListView.separated(
                   itemCount: _event.length,
                   itemBuilder: (context, index) {
                     return DragTargetWidget(
-                      title: _event[index],
+                      title: _event[index].id,
                       indexItem: index,
                       isLast: index == _event.length - 1,
                       isFirst: index == 0,
                       streamController: draggableController,
                       onTargetAccept: () {
-                        _event.insert(index + 1, Uuid().v4());
+                        _event.insert(
+                            index + 1, TravelModelItem(const Uuid().v4()));
                         setState(() {});
                       },
                       onMoveIndex: (value) {
-                        targetMove = value;
-                        print("onMoveIndex: $targetMove");
+                        if (value.isNotEmpty) {
+                          travelItemOnMove =
+                              _event.firstWhere((e) => e.id == value);
+                        } else {
+                          travelItemOnMove = TravelModelItem("");
+                        }
                         setState(() {});
                       },
                       onChangeIndex: (value) {
-                        if (value.isNotEmpty) {
-                          int index1 = _event.indexOf(value);
-                          int index2 = _event.indexOf(targetMove);
-                          _event.removeAt(index2);
-                          _event.insert(min(_event.length, index1 + 1), targetMove);
+                        try {
+                          if (value.id.isNotEmpty) {
+                            int index1 =
+                                _event.indexWhere((e) => e.id == value.id);
+                            int index2 = _event
+                                .indexWhere((e) => e.id == travelItemOnMove.id);
+                            _event.removeAt(index2);
+                            _event.insert(min(_event.length, index1 + 1),
+                                travelItemOnMove);
+                          }
+                        } catch (e) {
+                          print("onChangeIndex error $e");
+                        } finally {
+                          travelItemOnMove = TravelModelItem("");
+                          setState(() {});
                         }
-                        targetMove = "";
-                        setState(() {});
                       },
-                      targetId: _event[index],
+                      targetId: _event[index].id,
                     );
                   },
                   separatorBuilder: (BuildContext context, int index) {
@@ -131,8 +147,8 @@ class _MyHomePageState extends State<MyHomePage> {
                   y = defaultY;
                   setState2(() {});
                 },
-                feedback: StreamBuilder<DraggableInfo>(
-                  initialData: DraggableInfo(false, ''),
+                feedback: StreamBuilder<TravelModelItem>(
+                  initialData: TravelModelItem(""),
                   stream: draggableController.stream,
                   builder: (context, snapshot) {
                     bool isOnTarget = snapshot.data?.isOnTarget ?? false;
@@ -150,8 +166,11 @@ class _MyHomePageState extends State<MyHomePage> {
                 childWhenDragging: const SizedBox(),
                 child: DragTarget<String>(
                   onAccept: (data) {
-                    _event.remove(targetMove);
-                    targetMove = "";
+                    _event.removeWhere((e) => e.id == travelItemOnMove.id);
+                    for (var element in _event) {
+                      print(element.itemSize);
+                    }
+                    travelItemOnMove = TravelModelItem("");
                     setState(() {});
                   },
                   builder: (context, candidateData, rejectedData) {
@@ -159,8 +178,9 @@ class _MyHomePageState extends State<MyHomePage> {
                       width: floatingActionSize,
                       height: floatingActionSize,
                       color: Colors.blue,
-                      child: Icon(
-                          targetMove.isNotEmpty ? Icons.delete : Icons.add),
+                      child: Icon(travelItemOnMove.id.isNotEmpty
+                          ? Icons.delete
+                          : Icons.add),
                     );
                   },
                 ),
@@ -174,14 +194,14 @@ class _MyHomePageState extends State<MyHomePage> {
 }
 
 class DragTargetWidget extends StatefulWidget {
-  final StreamController<DraggableInfo> streamController;
+  final StreamController<TravelModelItem> streamController;
   final VoidCallback onTargetAccept;
   final bool targetEmpty;
   final String? title;
   final bool? isLast;
   final bool? isFirst;
   final int indexItem;
-  final ValueChanged<String>? onChangeIndex;
+  final ValueChanged<TravelModelItem>? onChangeIndex;
   final ValueChanged<String>? onMoveIndex;
   final String targetId;
 
@@ -204,7 +224,7 @@ class DragTargetWidget extends StatefulWidget {
 }
 
 class _DragTargetWidgetState extends State<DragTargetWidget> {
-  late StreamController<DraggableInfo> _streamController;
+  late StreamController<TravelModelItem> _streamController;
   late String _targetId;
   final ValueNotifier<Alignment> _alignment = ValueNotifier(Alignment.center);
   bool onLongPress = false;
@@ -232,17 +252,21 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
     super.didUpdateWidget(oldWidget);
     _streamController = widget.streamController;
     _targetId = widget.targetId;
+
+    targetSize = _event.firstWhereOrNull((e) => e.id == _targetId)?.itemSize ??
+        Size(screenSize.width * 0.75, 75);
+
     setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DraggableInfo>(
-      initialData: DraggableInfo(false, _targetId),
+    return StreamBuilder<TravelModelItem>(
+      initialData: TravelModelItem(_targetId),
       stream: _streamController.stream,
       builder: (context, snapshot) {
         bool isOnTarget = snapshot.data?.isOnTarget ?? false;
-        String? draggableId = snapshot.data?.draggableId;
+        String? draggableId = snapshot.data?.id;
         return Align(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -271,15 +295,17 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
                         widget.onMoveIndex?.call("");
                       },
                       feedback: Material(
+                        borderRadius: BorderRadius.circular(8),
                         child: Container(
-                          height: targetSize.height,
+                          height: 75,
                           width: targetSize.width,
                           decoration: BoxDecoration(
                             color: Colors.blueGrey,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Center(
-                            child: Text(widget.title ?? _targetId),
+                            child: Text(
+                                "${widget.title ?? _targetId} $targetSize"),
                           ),
                         ),
                       ),
@@ -299,7 +325,8 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Center(
-                          child: Text(widget.title ?? _targetId),
+                          child:
+                              Text("${widget.title ?? _targetId} $targetSize"),
                         ),
                       ),
                     ),
@@ -400,6 +427,10 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
         setState(() {
           targetSize = Size(screenSize.width * 0.75, newHeight);
         });
+
+        int indexCurrentItem = _event.indexWhere((e) => e.id == _targetId);
+        _event[indexCurrentItem] =
+            _event[indexCurrentItem].copyWith(itemSize: targetSize);
       },
       child: child,
     );
@@ -434,18 +465,22 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
             if (item == "addNewDraggable") {
               widget.onTargetAccept.call();
             } else {
-              widget.onChangeIndex?.call(widget.targetId);
+              widget.onChangeIndex?.call(TravelModelItem(_targetId,
+                  isOnTarget: false, itemSize: targetSize));
             }
 
-            _streamController.sink.add(DraggableInfo(false, _targetId));
+            _streamController.sink
+                .add(TravelModelItem(_targetId, isOnTarget: false));
           },
           onWillAccept: (item) {
-            int indexTargetMove = _event.indexOf(targetMove);
-            int indexCurrentTarGet = _event.indexOf(_targetId);
-            print("$indexTargetMove $indexCurrentTarGet");
-            if (targetMove == _targetId) return false;
+            int indexTargetMove =
+                _event.indexWhere((e) => e.id == travelItemOnMove.id);
+            int indexCurrentTarGet =
+                _event.indexWhere((e) => e.id == _targetId);
+            if (travelItemOnMove.id == _targetId) return false;
             if (indexTargetMove == (indexCurrentTarGet + 1)) return false;
-            _streamController.sink.add(DraggableInfo(true, _targetId));
+            _streamController.sink
+                .add(TravelModelItem(_targetId, isOnTarget: true));
             return true;
           },
           onMove: (DragTargetDetails<String> details) {
@@ -460,7 +495,8 @@ class _DragTargetWidgetState extends State<DragTargetWidget> {
           },
           onLeave: (item) async {
             await animationController?.reverse();
-            _streamController.sink.add(DraggableInfo(false, _targetId));
+            _streamController.sink
+                .add(TravelModelItem(_targetId, isOnTarget: false));
           },
         );
       },
@@ -529,10 +565,4 @@ class _CreateButtonWidgetState extends State<CreateButtonWidget>
           );
         });
   }
-}
-
-class DraggableInfo {
-  bool isOnTarget;
-  final String draggableId;
-  DraggableInfo(this.isOnTarget, this.draggableId);
 }
