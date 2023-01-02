@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:travel_animation/travel_item_model.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../constants/config.dart';
 import 'bloc.dart';
 
 class ListEventBloc extends Bloc<ListEventEvent, ListEventState> {
@@ -14,12 +15,13 @@ class ListEventBloc extends Bloc<ListEventEvent, ListEventState> {
     on<RemoveEvent>(_removeEvent);
     on<TravelItemMove>(_onTravelItemMove);
     on<ChangePositionEvent>(_changePositionEvent);
+    on<ChangeSizeEvent>(_changeSizeEvent);
   }
 
   final BuildContext context;
 
   Size get travelItemSizeDefault =>
-      Size(MediaQuery.of(context).size.width * 0.75, 75);
+      Size(MediaQuery.of(context).size.width * 0.75, defaultEventHeight);
 
   void _addNewEvent(AddNewEvent event, Emitter<ListEventState> emit) {
     List<TravelModelItem> data = List.from(state.listEvent);
@@ -28,8 +30,10 @@ class ListEventBloc extends Bloc<ListEventEvent, ListEventState> {
         ? null
         : _eventItemById(data[min(indexInsert - 1, data.length)].id)?.endTime;
     DateTime startTime =
-        aboveTime?.add(const Duration(minutes: 10)) ?? DateTime.now();
-    DateTime endTime = startTime.add(const Duration(hours: 1));
+        aboveTime?.add(const Duration(minutes: defaultWalkTime)) ??
+            DateTime.now();
+    DateTime endTime = startTime.add(
+        Duration(minutes: fromHeightToMinute(travelItemSizeDefault.height)));
     data.insert(
       indexInsert,
       TravelModelItem(
@@ -78,6 +82,23 @@ class ListEventBloc extends Bloc<ListEventEvent, ListEventState> {
     );
   }
 
+  void _changeSizeEvent(ChangeSizeEvent event, Emitter<ListEventState> emit) {
+    TravelModelItem? item = _eventItemById(event.eventId);
+    List<TravelModelItem> data =
+        List.from(state.listEvent.slice(_indexEventById(event.eventId) + 1));
+    TravelModelItem? nextItem = data.isNotEmpty ? data.first : null;
+    item?.changeItemSize(event.isIncrease);
+    if ((item?.itemSize?.height ?? 0) < maxEventHeight ||
+        (item?.itemSize?.height ?? 0) > minEventHeight) {
+      nextItem?.changeNextItemSize(event.isIncrease, item?.endTime);
+      data.forEachIndexed((index, element) {
+        if (element.id != nextItem?.id) {
+          element.changeItemTime(data[index - 1].endTime);
+        }
+      });
+    }
+  }
+
   int _indexEventById(String? eventId, [List<TravelModelItem>? otherList]) {
     return (otherList ?? state.listEvent).indexWhere((e) => e.id == eventId);
   }
@@ -85,4 +106,8 @@ class ListEventBloc extends Bloc<ListEventEvent, ListEventState> {
   TravelModelItem? _eventItemById(String eventId) {
     return state.listEvent.firstWhereOrNull((e) => e.id == eventId);
   }
+}
+
+int fromHeightToMinute(double height) {
+  return ((height * defaultEventTime) / defaultEventHeight).round();
 }

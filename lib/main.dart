@@ -21,7 +21,7 @@ class MyApp extends StatelessWidget {
         create: (_) => FloatAddButtonNotifier(),
         builder: (context, child) {
           return BlocProvider(
-            create: (_) => ListEventBloc(context),
+            create: (context) => ListEventBloc(context),
             child: const EventHomeScreen(),
           );
         },

@@ -28,7 +28,15 @@ class _EventWidgetState extends State<EventWidget> {
             _customDivider(value.startTime, value),
             Row(
               children: [
-                const Spacer(),
+                Expanded(
+                  child: Center(
+                    child: Text(value.endTime
+                            ?.difference(value.startTime ?? DateTime.now())
+                            .inMinutes
+                            .toString() ??
+                        ""),
+                  ),
+                ),
                 Draggable<String>(
                   data: value.id,
                   onDragStarted: () {
@@ -93,12 +101,11 @@ class _EventWidgetState extends State<EventWidget> {
           () => isLongPress = false,
         ),
         onLongPressMoveUpdate: (LongPressMoveUpdateDetails details) {
-          item.changeItemSize(
-            details.globalPosition.dy > globalPositionPress,
-            onChangeSize: () {
-              widget.nextEventItem?.changeNextItem(
-                  details.globalPosition.dy > globalPositionPress);
-            },
+          _listEventBloc.add(
+            ChangeSizeEvent(
+              details.globalPosition.dy > globalPositionPress,
+              item.id,
+            ),
           );
           globalPositionPress = details.globalPosition.dy;
         },

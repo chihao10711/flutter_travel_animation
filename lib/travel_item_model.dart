@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'constants/constants.dart';
+import 'features/event/bloc/bloc.dart';
+
 class TravelModelItem extends ChangeNotifier {
   final String id;
   final String? name;
@@ -8,57 +11,51 @@ class TravelModelItem extends ChangeNotifier {
   DateTime? startTime;
   DateTime? endTime;
 
-  void changeItemSize(bool isIncrease, {required VoidCallback onChangeSize}) {
+  void changeItemSize(bool isIncrease) {
     var newHeight = itemSize?.height ?? 0;
-    int _time = 0;
 
     if (isIncrease) {
       newHeight++;
-      _time++;
-      if (newHeight > 100) {
-        newHeight = 100;
-        return;
+      if (newHeight > maxEventHeight) {
+        newHeight = maxEventHeight;
       }
-      endTime = endTime?.add(Duration(minutes: _time));
-      itemSize = Size(itemSize?.width ?? 0, newHeight);
     } else {
       newHeight--;
-      _time--;
-
-      if (newHeight < 50) {
-        newHeight = 50;
-        return;
+      if (newHeight < minEventHeight) {
+        newHeight = minEventHeight;
       }
-      endTime = endTime?.add(Duration(minutes: _time));
-      itemSize = Size(itemSize?.width ?? 0, newHeight);
     }
-    onChangeSize.call();
+    itemSize = Size(itemSize?.width ?? 0, newHeight);
+    endTime = startTime!.add(Duration(minutes: fromHeightToMinute(newHeight)));
+
     notifyListeners();
   }
 
-  void changeNextItem(bool isIncrease) {
+  void changeNextItemSize(bool isIncrease, DateTime? aboveTime) {
+    if (startTime == null || endTime == null) return;
     var newHeight = itemSize?.height ?? 0;
-    int _time = 0;
+    startTime = aboveTime?.add(const Duration(minutes: defaultWalkTime));
+
     if (isIncrease) {
       newHeight--;
-      _time++;
-
-      if (newHeight < 50) {
-        newHeight = 50;
-        return;
+      if (newHeight < minEventHeight) {
+        newHeight = minEventHeight;
       }
-      itemSize = Size(itemSize?.width ?? 0, newHeight);
-      startTime = startTime?.add(Duration(minutes: _time));
     } else {
       newHeight++;
-      _time--;
-      if (newHeight > 100) {
-        newHeight = 100;
-        return;
+      if (newHeight > maxEventHeight) {
+        newHeight = maxEventHeight;
       }
-      itemSize = Size(itemSize?.width ?? 0, newHeight);
-      startTime = startTime?.add(Duration(minutes: _time));
     }
+    endTime = startTime!.add(Duration(minutes: fromHeightToMinute(newHeight)));
+    itemSize = Size(itemSize?.width ?? 0, newHeight);
+    notifyListeners();
+  }
+
+  void changeItemTime(DateTime? aboveTime) {
+    startTime = aboveTime?.add(const Duration(minutes: defaultWalkTime));
+    endTime = startTime!
+        .add(Duration(minutes: fromHeightToMinute(itemSize?.height ?? 0)));
     notifyListeners();
   }
 

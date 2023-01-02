@@ -35,3 +35,13 @@ class RemoveEvent extends ListEventEvent {
   @override
   List<Object?> get props => [eventId];
 }
+
+class ChangeSizeEvent extends ListEventEvent {
+  final bool isIncrease;
+  final String eventId;
+
+  ChangeSizeEvent(this.isIncrease, this.eventId);
+
+  @override
+  List<Object?> get props => [];
+}
